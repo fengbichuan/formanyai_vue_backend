@@ -7,6 +7,7 @@ public class AnswerMessage {
         this.answer = answer;
     }
 
+
     public String getAnswer() {
         return answer;
     }
