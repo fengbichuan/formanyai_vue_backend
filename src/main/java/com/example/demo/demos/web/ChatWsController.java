@@ -24,8 +24,8 @@ public class ChatWsController {
     private static final Logger logger = LoggerFactory.getLogger(ChatWsController.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    // 内容缓存（线程安全）
-    private final Map<String, StringBuilder> contentCache = new ConcurrentHashMap<>();
+    // 双缓存结构（线程安全）
+    private final Map<String, Map<String, StringBuilder>> contentCache = new ConcurrentHashMap<>();
     private final WebClient webClient;
     private final SimpMessageSendingOperations messagingTemplate;
 
@@ -50,7 +50,11 @@ public class ChatWsController {
         message.getAis().forEach(ai -> {
             CompletableFuture.runAsync(() -> {
                 final long startTime = System.currentTimeMillis();
-                contentCache.put(ai, new StringBuilder());
+                // 初始化双缓存
+                contentCache.put(ai, new HashMap<>() {{
+                    put("content", new StringBuilder());
+                    put("reasoning", new StringBuilder());
+                }});
 
                 try {
                     Map<String, Object> requestBody = new HashMap<>();
@@ -78,6 +82,7 @@ public class ChatWsController {
                             );
                 } catch (Exception e) {
                     logger.error("[初始化异常] {}", ai, e);
+                    cleanupCache(ai);
                 }
             });
         });
@@ -85,82 +90,78 @@ public class ChatWsController {
 
     private void processStreamChunk(String ai, String chunk, long startTime) {
         try {
-            // 打印原始 chunk 数据
             logger.debug("[原始数据] AI: {} | Chunk: {}", ai, chunk);
 
-            if (chunk.startsWith("data: ")) {
-                String jsonStr = chunk.substring(6).trim();
+            String jsonStr = chunk.trim();
+            logger.debug("[解析前] AI: {} | JSON: {}", ai, jsonStr);
 
-                // 打印解析前的 JSON 字符串
-                logger.debug("[解析前] AI: {} | JSON: {}", ai, jsonStr);
+            if ("[DONE]".equals(jsonStr)) {
+                logger.debug("[流结束] {}", ai);
+                return;
+            }
 
-                if ("[DONE]".equals(jsonStr)) {
-                    logger.debug("[流结束] {}", ai);
-                    return;
+            JsonNode node = objectMapper.readTree(jsonStr);
+            JsonNode choices = node.path("choices");
+            logger.debug("[完整JSON] AI: {} | Node: {}", ai, node.toPrettyString());
+
+            if (choices.isEmpty() || !choices.get(0).has("delta")) {
+                logger.warn("[异常结构] AI: {} | 数据: {}", ai, chunk);
+                return;
+            }
+
+            JsonNode delta = choices.get(0).path("delta");
+            logger.debug("[Delta内容] AI: {} | Delta: {}", ai, delta.toPrettyString());
+
+            // 同时处理主内容和推理内容
+            String content = delta.path("content").asText("");
+            String reasoning = delta.path("reasoning_content").asText("");
+
+            // 更新双缓存
+            if (!content.isEmpty() || !reasoning.isEmpty()) {
+                synchronized (contentCache) {
+                    Map<String, StringBuilder> aiCache = contentCache.get(ai);
+                    if (content != null) aiCache.get("content").append(content);
+                    if (reasoning != null) aiCache.get("reasoning").append(reasoning);
                 }
-
-                JsonNode node = objectMapper.readTree(jsonStr);
-                JsonNode choices = node.path("choices");
-
-                // 打印完整的 JSON 结构（调试用）
-                logger.debug("[完整JSON] AI: {} | Node: {}", ai, node.toPrettyString());
-
-                // 验证数据结构
-                if (choices.isEmpty() || !choices.get(0).has("delta")) {
-                    logger.warn("[异常结构] AI: {} | 数据: {}", ai, chunk);
-                    return;
-                }
-
-                JsonNode delta = choices.get(0).path("delta");
-
-                // 打印 delta 内容
-                logger.debug("[Delta内容] AI: {} | Delta: {}", ai, delta.toPrettyString());
-
-                // 优先从 reasoning_content 提取内容
-                String content = delta.path("reasoning_content").asText("");
-                // 打印提取的内容
-                if (!content.isEmpty()) {
-                    logger.debug("[提取内容] AI: {} | 内容: {}", ai, content);
-                    contentCache.get(ai).append(content);
-                    sendStreamChunk(ai, content, startTime);
-                } else {
-                    logger.trace("[空内容块] AI: {} | 数据: {}", ai, chunk);
-                }
+                sendStreamChunk(ai, content, reasoning, startTime);
             }
         } catch (Exception e) {
             logger.error("[解析异常] AI: {} | 错误: {} | 原始数据: {}",
                     ai, e.getMessage(), chunk);
         }
     }
-    private void sendStreamChunk(String ai, String content, long startTime) {
+
+    private void sendStreamChunk(String ai, String content, String reasoning, long startTime) {
         Map<String, Object> response = new HashMap<>();
         response.put("ai", ai);
         response.put("content", content);
+        response.put("reasoning", reasoning);
         response.put("done", false);
         response.put("time", System.currentTimeMillis() - startTime);
 
         messagingTemplate.convertAndSend("/topic/answers", response);
-        logger.debug("[流数据] {} 发送: {}", ai, content);
+        logger.debug("[双流数据] {} | 主内容: {} | 推理链: {}", ai, content.length(), reasoning.length());
     }
 
     private void sendFinalResponse(String ai, long startTime) {
         try {
-            String fullContent = contentCache.getOrDefault(ai, new StringBuilder()).toString();
+            Map<String, StringBuilder> aiCache = contentCache.get(ai);
+            String fullContent = aiCache.get("content").toString();
+            String fullReasoning = aiCache.get("reasoning").toString();
 
-            // 打印最终完整内容
-            logger.info("[最终内容] AI: {} | 内容: {}", ai, fullContent);
+            logger.info("[最终内容] AI: {} | 主内容长度: {} | 推理链长度: {}",
+                    ai, fullContent.length(), fullReasoning.length());
 
             Map<String, Object> response = new HashMap<>();
             response.put("ai", ai);
             response.put("content", fullContent);
+            response.put("reasoning", fullReasoning);
             response.put("done", true);
             response.put("time", System.currentTimeMillis() - startTime);
 
             messagingTemplate.convertAndSend("/topic/answers", response);
-            logger.info("[完成响应] {} | 耗时: {}ms | 字数: {}",
-                    ai, response.get("time"), fullContent.length());
         } finally {
-            contentCache.remove(ai);
+            cleanupCache(ai);
         }
     }
 
@@ -174,6 +175,11 @@ public class ChatWsController {
         response.put("time", System.currentTimeMillis() - startTime);
 
         messagingTemplate.convertAndSend("/topic/answers", response);
+        cleanupCache(ai);
+    }
+
+    private void cleanupCache(String ai) {
         contentCache.remove(ai);
+        logger.debug("[缓存清理] {}", ai);
     }
 }

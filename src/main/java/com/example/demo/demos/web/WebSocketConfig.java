@@ -24,4 +24,5 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 .setAllowedOriginPatterns("*");
 //                .withSockJS();           // 开启 SockJS 支持，方便不支持 WebSocket 的浏览器
     }
+
 }
