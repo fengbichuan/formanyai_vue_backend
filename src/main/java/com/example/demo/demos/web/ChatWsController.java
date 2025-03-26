@@ -46,37 +46,80 @@ public class ChatWsController {
     public void handleQuestion(QuestionMessage message) {
         message.getAis().forEach(ai -> {
             CompletableFuture.runAsync(() -> {
-                final long startTime = System.currentTimeMillis();
 
-                try {
-                    Map<String, Object> requestBody = new HashMap<>();
-                    requestBody.put("model", "deepseek-r1-250120");
-                    requestBody.put("messages", List.of(
-                            Map.of("role", "user", "content", message.getQuestion())
-                    ));
-                    requestBody.put("max_tokens", 4000);
-                    requestBody.put("temperature", 0.7);
-                    requestBody.put("stream", true);
-
-                    logger.info("[请求发送] AI: {} | 问题: {}", ai, message.getQuestion());
-
-                    webClient.post()
-                            .uri("/v1/chat/completions")
-                            .bodyValue(requestBody)
-                            .retrieve()
-                            .bodyToFlux(String.class)
-                            .timeout(Duration.ofSeconds(30))
-                            .filter(chunk -> chunk != null && !chunk.isEmpty())
-                            .subscribe(
-                                    chunk -> processStreamChunk(ai, chunk, startTime),
-                                    error -> handleStreamError(ai, error, startTime),
-                                    () -> sendStreamCompletion(ai, startTime)  // 修改最终发送逻辑
-                            );
-                } catch (Exception e) {
-                    logger.error("[初始化异常] {}", ai, e);
+                if ("coze".equalsIgnoreCase(ai)) {
+                    sendCOZERequest(message, ai);
+                } else {
+                    sendCommonRequest(message, ai);
                 }
+
             });
         });
+    }
+
+    private void sendCommonRequest(QuestionMessage message, String ai) {
+        final long startTime = System.currentTimeMillis();
+
+        try {
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("model", "deepseek-r1-250120");
+            requestBody.put("messages", List.of(
+                    Map.of("role", "user", "content", message.getQuestion())
+            ));
+            requestBody.put("max_tokens", 4000);
+            requestBody.put("temperature", 0.7);
+            requestBody.put("stream", true);
+
+            logger.info("[请求发送] AI: {} | 问题: {}", ai, message.getQuestion());
+
+            webClient.post()
+                    .uri("/v1/chat/completions")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToFlux(String.class)
+                    .timeout(Duration.ofSeconds(30))
+                    .filter(chunk -> chunk != null && !chunk.isEmpty())
+                    .subscribe(
+                            chunk -> processStreamChunk(ai, chunk, startTime),
+                            error -> handleStreamError(ai, error, startTime),
+                            () -> sendStreamCompletion(ai, startTime)  // 修改最终发送逻辑
+                    );
+        } catch (Exception e) {
+            logger.error("[初始化异常] {}", ai, e);
+        }
+    }
+
+
+    private void sendCOZERequest(QuestionMessage message, String ai) {
+        final long startTime = System.currentTimeMillis();
+
+        try {
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("model", "deepseek-r1-250120");
+            requestBody.put("messages", List.of(
+                    Map.of("role", "user", "content", message.getQuestion())
+            ));
+            requestBody.put("max_tokens", 4000);
+            requestBody.put("temperature", 0.7);
+            requestBody.put("stream", true);
+
+            logger.info("[请求发送] AI: {} | 问题: {}", ai, message.getQuestion());
+
+            webClient.post()
+                    .uri("/v1/chat/completions")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToFlux(String.class)
+                    .timeout(Duration.ofSeconds(30))
+                    .filter(chunk -> chunk != null && !chunk.isEmpty())
+                    .subscribe(
+                            chunk -> processStreamChunk(ai, chunk, startTime),
+                            error -> handleStreamError(ai, error, startTime),
+                            () -> sendStreamCompletion(ai, startTime)  // 修改最终发送逻辑
+                    );
+        } catch (Exception e) {
+            logger.error("[初始化异常] {}", ai, e);
+        }
     }
 
     private void processStreamChunk(String ai, String chunk, long startTime) {
