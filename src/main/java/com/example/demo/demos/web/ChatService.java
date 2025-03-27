@@ -1,8 +1,11 @@
 package com.example.demo.demos.web;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -16,6 +19,9 @@ public class ChatService {
     @Autowired
     @Qualifier("openaiRestTemplate")
     private RestTemplate restTemplate;
+
+    @Autowired
+    private ObjectMapper objectMapper; // 添加ObjectMapper的自动注入
 
     @Value("${deepseek.model}")
     private String model;
@@ -34,6 +40,16 @@ public class ChatService {
     @Value("${ai.model3.api.key}")
     private String model3ApiKey;
 
+    // 在 ChatService 类中添加以下字段
+    @Value("${ai.model4.api.url}")
+    private String model4ApiUrl;
+
+    @Value("${ai.model4.api.key}")
+    private String model4ApiKey;
+
+    @Value("${ai.model4.api.appid}")
+    private String model4AppId;
+
     // Getter methods to access the injected URLs
     public String getApiUrl() {
         return apiUrl;
@@ -45,6 +61,11 @@ public class ChatService {
 
     public String getModel3ApiUrl() {
         return model3ApiUrl;
+    }
+
+    // 添加获取URL的方法
+    public String getModel4ApiUrl() {
+        return model4ApiUrl;
     }
 
     // Standard method for REST API call to multiple models
@@ -66,6 +87,9 @@ public class ChatService {
 
     // Method to get answers from multiple models
     public Map<String, String> getCombinedAnswer(String prompt) {
+        // 创建Coze会话并立即提问
+        CompletableFuture<String> answer4 = createCozeConversation()
+                .thenCompose(conversationId -> chatWithCoze(conversationId, prompt));
         // Call all AI models in parallel and combine the answers
         CompletableFuture<String> answer1 = getAnswerFromModel(prompt, apiUrl, "API_KEY_1");
         CompletableFuture<String> answer2 = getAnswerFromModel(prompt, model2ApiUrl, model2ApiKey);
@@ -75,8 +99,92 @@ public class ChatService {
         return Map.of(
                 "answer1", answer1.join().trim(),
                 "answer2", answer2.join().trim(),
-                "answer3", answer3.join().trim()
+                "answer3", answer3.join().trim(),
+                "answer4", answer4.join().trim()  // 新增第四个回答
         );
 
     }
+    // 创建Coze对话
+    public CompletableFuture<String> createCozeConversation() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                // 确保URL正确拼接
+//                String url = String.format("%s/create_conversation", model4ApiUrl.endsWith("/")
+//                        ? model4ApiUrl.substring(0, model4ApiUrl.length()-1)
+//                        : model4ApiUrl);
+
+                String url = model4ApiUrl+ "/create_conversation";
+
+
+                HttpHeaders headers = new HttpHeaders();
+                headers.set("Apikey", model4ApiKey);
+                headers.set("Content-Type", "application/json");
+
+                CozeRequest request = new CozeRequest();
+                request.setAppID(model4AppId.trim()); // 去除可能的空格
+                request.setUserID("2120240810");
+//                request.setInputs(Map.of("init", "true")); // 根据API文档要求参数
+                request.setQuery("初始化查询"); // 必须的查询字段
+
+                HttpEntity<CozeRequest> entity = new HttpEntity<>(request, headers);
+
+                // 打印调试信息
+                // 打印调试信息：请求头、请求体和URL
+                System.out.println("[规范调试] 请求URL: " + url);
+//                System.out.println("[规范调试] 请求头: " + headers);
+                System.out.println("[规范调试] 序列化请求体: "
+                        + objectMapper.writeValueAsString(request));
+
+                CozeResponse response = restTemplate.postForObject(url, request, CozeResponse.class);
+
+                if (response == null || response.getAppConversationID() == null) {
+                    throw new RuntimeException("API返回无效响应，原始数据："
+                            + (response != null ? objectMapper.writeValueAsString(response) : "null"));
+                }
+                return response.getAppConversationID();
+            } catch (Exception e) {
+                throw new RuntimeException("创建对话失败: " + e.getMessage(), e);
+            }
+        });
+    }
+
+    // 修改提问方法
+    public CompletableFuture<String> chatWithCoze(String conversationId, String question) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                String url = String.format("%s/chat_query", model4ApiUrl.endsWith("/")
+                        ? model4ApiUrl.substring(0, model4ApiUrl.length()-1)
+                        : model4ApiUrl);
+
+                HttpHeaders headers = new HttpHeaders();
+                headers.set("Apikey", model4ApiKey);
+                headers.set("Content-Type", "application/json");
+
+                CozeRequest request = new CozeRequest();
+                request.setAppID(model4AppId.trim());
+                request.setAppConversationID(conversationId);
+                request.setQuery(question);
+                request.setResponseMode("streaming");
+                request.setUserID("2120240810");
+
+                HttpEntity<CozeRequest> entity = new HttpEntity<>(request, headers);
+
+                // 打印调试信息：请求头、请求体和URL
+                System.out.println("[规范调试] 请求URL: " + url);
+                System.out.println("[规范调试] 请求头: " + headers);
+                System.out.println("[规范调试] 请求体: " + objectMapper.writeValueAsString(request));
+
+                CozeResponse response = restTemplate.postForObject(url, entity, CozeResponse.class);
+
+                if (response == null || response.getAnswer() == null) {
+                    throw new RuntimeException("API返回空回答，响应："
+                            + (response != null ? objectMapper.writeValueAsString(response) : "null"));
+                }
+                return response.getAnswer();
+            } catch (Exception e) {
+                throw new RuntimeException("提问失败: " + e.getMessage());
+            }
+        });
+    }
+
 }
