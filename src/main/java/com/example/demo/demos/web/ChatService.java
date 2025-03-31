@@ -1,5 +1,6 @@
 package com.example.demo.demos.web;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -9,6 +10,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -124,7 +126,7 @@ public class ChatService {
                 request.setAppID(model4AppId.trim()); // 去除可能的空格
                 request.setUserID("2120240810");
 //                request.setInputs(Map.of("init", "true")); // 根据API文档要求参数
-                request.setQuery("初始化查询"); // 必须的查询字段
+                request.setQuery(""); // 必须的查询字段
 
                 HttpEntity<CozeRequest> entity = new HttpEntity<>(request, headers);
 
@@ -135,18 +137,42 @@ public class ChatService {
                 System.out.println("[规范调试] 序列化请求体: "
                         + objectMapper.writeValueAsString(request));
 
-                CozeResponse response = restTemplate.postForObject(url, request, CozeResponse.class);
-
-                if (response == null || response.getAppConversationID() == null) {
-                    throw new RuntimeException("API返回无效响应，原始数据："
-                            + (response != null ? objectMapper.writeValueAsString(response) : "null"));
+//                CozeResponse response = restTemplate.postForObject(url, request, CozeResponse.class);
+//
+//                if (response == null || response.getAppConversationID() == null) {
+//                    throw new RuntimeException("API返回无效响应，原始数据："
+//                            + (response != null ? objectMapper.writeValueAsString(response) : "null"));
+//                }
+//                return response.getAppConversationID();
+//                TempResponseData response = restTemplate.postForObject(url, entity, TempResponseData.class);
+//                if (response == null || response.getConversation() == null)
+//                    throw new RuntimeException("API返回无效响应，原始数据："
+//                            + (response != null ? objectMapper.writeValueAsString(response) : "null"));
+//                return response.getConversation().getAppConversationID();
+                JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
+                if (response != null && response.has("Conversation") && response.get("Conversation").has("AppConversationID")) {
+                    return response.get("Conversation").get("AppConversationID").asText();
+                } else {
+                    throw new RuntimeException("API返回无效响应，原始数据：" + (response != null ? response.toString() : "null"));
                 }
-                return response.getAppConversationID();
             } catch (Exception e) {
                 throw new RuntimeException("创建对话失败: " + e.getMessage(), e);
             }
         });
     }
+
+    /*
+    {
+    "Conversation": {
+        "AppConversationID": "cvin5gv5usogqsuoen0g",
+        "ConversationName": "新的会话",
+        "CreateTime": "",
+        "LastChatTime": "",
+        "EmptyConversation": false
+    },
+    "BaseResp": null
+}
+     */
 
     // 修改提问方法
     public CompletableFuture<String> chatWithCoze(String conversationId, String question) {
@@ -164,7 +190,7 @@ public class ChatService {
                 request.setAppID(model4AppId.trim());
                 request.setAppConversationID(conversationId);
                 request.setQuery(question);
-                request.setResponseMode("streaming");
+                request.setResponseMode("blocking");
                 request.setUserID("2120240810");
 
                 HttpEntity<CozeRequest> entity = new HttpEntity<>(request, headers);
@@ -174,13 +200,40 @@ public class ChatService {
                 System.out.println("[规范调试] 请求头: " + headers);
                 System.out.println("[规范调试] 请求体: " + objectMapper.writeValueAsString(request));
 
-                CozeResponse response = restTemplate.postForObject(url, entity, CozeResponse.class);
-
-                if (response == null || response.getAnswer() == null) {
-                    throw new RuntimeException("API返回空回答，响应："
-                            + (response != null ? objectMapper.writeValueAsString(response) : "null"));
+//                CozeResponse response = restTemplate.postForObject(url, entity, CozeResponse.class);
+//
+//                if (response == null || response.getAnswer() == null) {
+//                    throw new RuntimeException("API返回空回答，响应："
+//                            + (response != null ? objectMapper.writeValueAsString(response) : "null"));
+//                }
+//                return response.getAnswer();
+                // {"event":"message_end","task_id":"01JQC5F0FJV0639FQ05SN1STCM","id":"01JQC5F0FJV0639FQ05SN1STCM","conversation_id":"01JQC1VJP5JXQ0YA2Q3A8WJ51M","answer":"xxxxx","created_at":0,"agent_configuration":{"retriever_resource":{"enabled":false}}}
+//                JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
+//                if (response != null && response.has("answer")) {
+//                    return response.get("answer").asText();
+//                } else {
+//                    throw new RuntimeException("API返回无效响应，原始数据：" + (response != null ? response.toString() : "null"));
+//                }
+                String response = restTemplate.postForObject(url, entity, String.class);
+                System.err.println(response);
+                /*
+                event:text\ndata:data: {}
+                 */
+                if (response != null) {
+                    ObjectMapper mapper = new ObjectMapper();
+                    String pattern = "data:data: ";
+                    int index = response.indexOf(pattern);
+                    if (index != -1) {
+                        JsonNode jsonNode = mapper.readTree(response.substring(index + pattern.length()));
+                        if (jsonNode.has("answer")) {
+                            String tempAnswer = jsonNode.get("answer").asText();
+                            // 处理中文乱码问题
+                            return new String(tempAnswer.getBytes(StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8);
+                        }
+                    }
                 }
-                return response.getAnswer();
+                throw new RuntimeException("API返回无效响应，原始数据：" + (response != null ? response : "null"));
+
             } catch (Exception e) {
                 throw new RuntimeException("提问失败: " + e.getMessage());
             }
