@@ -178,7 +178,7 @@ public class ChatService {
     public CompletableFuture<String> chatWithCoze(String conversationId, String question) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                String url = String.format("%s/chat_query", model4ApiUrl.endsWith("/")
+                String url = String.format("%s/chat_query_v2", model4ApiUrl.endsWith("/")
                         ? model4ApiUrl.substring(0, model4ApiUrl.length()-1)
                         : model4ApiUrl);
 
@@ -221,14 +221,14 @@ public class ChatService {
                  */
                 if (response != null) {
                     ObjectMapper mapper = new ObjectMapper();
-                    String pattern = "data:data: ";
+                    String pattern = "";
                     int index = response.indexOf(pattern);
                     if (index != -1) {
                         JsonNode jsonNode = mapper.readTree(response.substring(index + pattern.length()));
                         if (jsonNode.has("answer")) {
                             String tempAnswer = jsonNode.get("answer").asText();
-                            // 处理中文乱码问题
-                            return new String(tempAnswer.getBytes(StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8);
+
+                            return tempAnswer;
                         }
                     }
                 }
