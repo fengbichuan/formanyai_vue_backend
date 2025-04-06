@@ -35,6 +35,6 @@ public class CozeResponse {
     }
 
     public void setAppConversationID(String appConversationID) {
-        appConversationID = appConversationID;
+        this.appConversationID = appConversationID;
     }
 }

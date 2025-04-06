@@ -49,8 +49,6 @@ public class ChatService {
     @Value("${ai.model4.api.key}")
     private String model4ApiKey;
 
-    @Value("${ai.model4.api.appid}")
-    private String model4AppId;
 
     // Getter methods to access the injected URLs
     public String getApiUrl() {
@@ -115,7 +113,7 @@ public class ChatService {
 //                        ? model4ApiUrl.substring(0, model4ApiUrl.length()-1)
 //                        : model4ApiUrl);
 
-                String url = model4ApiUrl+ "/create_conversation";
+                String url = "https://coze.nankai.edu.cn/api/proxy/api/v1/create_conversation";
 
 
                 HttpHeaders headers = new HttpHeaders();
@@ -123,7 +121,6 @@ public class ChatService {
                 headers.set("Content-Type", "application/json");
 
                 CozeRequest request = new CozeRequest();
-                request.setAppID(model4AppId.trim()); // 去除可能的空格
                 request.setUserID("2120240810");
 //                request.setInputs(Map.of("init", "true")); // 根据API文档要求参数
                 request.setQuery(""); // 必须的查询字段
@@ -187,7 +184,6 @@ public class ChatService {
                 headers.set("Content-Type", "application/json");
 
                 CozeRequest request = new CozeRequest();
-                request.setAppID(model4AppId.trim());
                 request.setAppConversationID(conversationId);
                 request.setQuery(question);
                 request.setResponseMode("blocking");
