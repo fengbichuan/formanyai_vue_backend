@@ -2,6 +2,7 @@ package com.example.demo.demos.web;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessageSendingOperations;
 import org.springframework.stereotype.Controller;
@@ -13,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,6 +26,7 @@ public class ChatWsController {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private final WebClient webClient;
+    private final WebClient cozeWebClient;
     private final SimpMessageSendingOperations messagingTemplate;
 
     @Value("${openai.api.url}")
@@ -31,6 +34,16 @@ public class ChatWsController {
 
     @Value("${openai.api.key}")
     private String apiKey;
+
+    @Value("${ai.model4.api.url}")
+    private String model4ApiUrl;
+
+    @Value("${ai.model4.api.key}")
+    private String model4ApiKey;
+
+    @Value("${ai.model4.api.appid}")
+    private String model4AppId;
+
 
     @Autowired
     public ChatWsController(SimpMessageSendingOperations messagingTemplate) {
@@ -40,10 +53,20 @@ public class ChatWsController {
                 .defaultHeader("Authorization", "Bearer " + "sk-804e2be556326d2bdea29a89be24ce4a")
                 .codecs(config -> config.defaultCodecs().maxInMemorySize(16 * 1024 * 1024))
                 .build();
+        String cozeUrl = "https://coze.nankai.edu.cn";
+        this.cozeWebClient = WebClient.builder()
+                .baseUrl(cozeUrl)
+                .defaultHeader("Apikey", model4ApiKey)
+                .defaultHeader("Content-Type", "application/json")
+                .codecs(config -> config.defaultCodecs().maxInMemorySize(16 * 1024 * 1024))
+                .build();
     }
 
     @MessageMapping("/ask")
     public void handleQuestion(QuestionMessage message) {
+        System.err.println("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
+        System.err.println(message.getAis());
+        System.err.println(message.getCozeConversationID());
         message.getAis().forEach(ai -> {
             CompletableFuture.runAsync(() -> {
 
@@ -91,29 +114,34 @@ public class ChatWsController {
 
 
     private void sendCOZERequest(QuestionMessage message, String ai) {
+        String conversationId = message.getCozeConversationID();
         final long startTime = System.currentTimeMillis();
 
         try {
+//            CozeRequest request = new CozeRequest();
+//            request.setAppConversationID(conversationId);
+//            request.setQuery(message.getQuestion());
+//            request.setResponseMode("streaming");
+//            request.setUserID("2120240810");
             Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("model", "deepseek-r1-250120");
-            requestBody.put("messages", List.of(
-                    Map.of("role", "user", "content", message.getQuestion())
-            ));
-            requestBody.put("max_tokens", 4000);
-            requestBody.put("temperature", 0.7);
-            requestBody.put("stream", true);
+            requestBody.put("AppConversationID", conversationId);
+            requestBody.put("Query", message.getQuestion());
+            requestBody.put("ResponseMode", "streaming");
+            requestBody.put("UserID", "2120240810");
+            System.err.println("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
+            System.err.println(requestBody);
 
             logger.info("[请求发送] AI: {} | 问题: {}", ai, message.getQuestion());
 
-            webClient.post()
-                    .uri("/v1/chat/completions")
+            cozeWebClient.post()
+                    .uri("/api/proxy/api/v1/chat_query_v2")
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToFlux(String.class)
                     .timeout(Duration.ofSeconds(30))
                     .filter(chunk -> chunk != null && !chunk.isEmpty())
                     .subscribe(
-                            chunk -> processStreamChunk(ai, chunk, startTime),
+                            chunk -> processCozeStreamChunk(ai, chunk, startTime),
                             error -> handleStreamError(ai, error, startTime),
                             () -> sendStreamCompletion(ai, startTime)  // 修改最终发送逻辑
                     );
@@ -189,4 +217,28 @@ public class ChatWsController {
 
         messagingTemplate.convertAndSend("/topic/answers", response);
     }
+
+    private void processCozeStreamChunk(String ai, String chunk, long startTime) {
+        logger.debug("[原始数据] AI: {} | Chunk: {}", ai, chunk);
+
+        String jsonStr = chunk.trim();
+
+        try {
+            JsonNode node = objectMapper.readTree(jsonStr);
+            String event = node.path("event").asText("");
+            List<String> endEvents = Arrays.asList("message_output_end", "message_end", "message_cost");
+            if (endEvents.contains(event)) {
+                logger.debug("[流结束] {}", ai);
+                return;
+            }
+
+            String answer = node.path("answer").asText("");
+            sendStreamChunk(ai, answer, "", startTime);
+
+        } catch (Exception e) {
+            logger.error("[解析异常] AI: {} | 错误: {} | 原始数据: {}",
+                    ai, e.getMessage(), chunk);
+        }
+    }
+
 }
