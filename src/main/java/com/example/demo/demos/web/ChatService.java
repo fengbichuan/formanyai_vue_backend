@@ -49,8 +49,6 @@ public class ChatService {
     @Value("${ai.model4.api.key}")
     private String model4ApiKey;
 
-    @Value("${ai.model4.api.appid}")
-    private String model4AppId;
 
     // Getter methods to access the injected URLs
     public String getApiUrl() {
@@ -115,7 +113,7 @@ public class ChatService {
 //                        ? model4ApiUrl.substring(0, model4ApiUrl.length()-1)
 //                        : model4ApiUrl);
 
-                String url = model4ApiUrl+ "/create_conversation";
+                String url = "https://coze.nankai.edu.cn/api/proxy/api/v1/create_conversation";
 
 
                 HttpHeaders headers = new HttpHeaders();
@@ -123,7 +121,6 @@ public class ChatService {
                 headers.set("Content-Type", "application/json");
 
                 CozeRequest request = new CozeRequest();
-                request.setAppID(model4AppId.trim()); // 去除可能的空格
                 request.setUserID("2120240810");
 //                request.setInputs(Map.of("init", "true")); // 根据API文档要求参数
                 request.setQuery(""); // 必须的查询字段
@@ -178,7 +175,7 @@ public class ChatService {
     public CompletableFuture<String> chatWithCoze(String conversationId, String question) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                String url = String.format("%s/chat_query", model4ApiUrl.endsWith("/")
+                String url = String.format("%s/chat_query_v2", model4ApiUrl.endsWith("/")
                         ? model4ApiUrl.substring(0, model4ApiUrl.length()-1)
                         : model4ApiUrl);
 
@@ -187,7 +184,6 @@ public class ChatService {
                 headers.set("Content-Type", "application/json");
 
                 CozeRequest request = new CozeRequest();
-                request.setAppID(model4AppId.trim());
                 request.setAppConversationID(conversationId);
                 request.setQuery(question);
                 request.setResponseMode("blocking");
@@ -221,14 +217,14 @@ public class ChatService {
                  */
                 if (response != null) {
                     ObjectMapper mapper = new ObjectMapper();
-                    String pattern = "data:data: ";
+                    String pattern = "";
                     int index = response.indexOf(pattern);
                     if (index != -1) {
                         JsonNode jsonNode = mapper.readTree(response.substring(index + pattern.length()));
                         if (jsonNode.has("answer")) {
                             String tempAnswer = jsonNode.get("answer").asText();
-                            // 处理中文乱码问题
-                            return new String(tempAnswer.getBytes(StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8);
+
+                            return tempAnswer;
                         }
                     }
                 }

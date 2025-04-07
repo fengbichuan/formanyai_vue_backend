@@ -5,9 +5,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Map;
 
 public class CozeRequest {
-    @JsonProperty("AppID")
-    private String appID;  // 统一使用小写驼峰命名
-
     @JsonProperty("AppConversationID")
     private String appConversationID;
 
@@ -24,8 +21,6 @@ public class CozeRequest {
 //    private Map<String, String> inputs;
 
     // Getter/Setter保持与字段名一致（小写驼峰）
-    public String getAppID() { return appID; }
-    public void setAppID(String appID) { this.appID = appID; }
 
     public String getAppConversationID() { return appConversationID; }
     public void setAppConversationID(String appConversationID) {
