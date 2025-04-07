@@ -12,7 +12,7 @@ public class CozeRequest {
     private String query = "";  // 设置默认值
 
     @JsonProperty("ResponseMode")
-    private String responseMode = "blocking";  // 默认响应模式
+    private String responseMode = "streaming";  // 默认响应模式
 
     @JsonProperty("UserID")
     private String userID;
@@ -32,7 +32,7 @@ public class CozeRequest {
 
     public String getResponseMode() { return responseMode; }
     public void setResponseMode(String responseMode) {
-        this.responseMode = responseMode != null ? responseMode : "blocking";
+        this.responseMode = responseMode != null ? responseMode : "streaming";
     }
 
     public String getUserID() { return userID; }

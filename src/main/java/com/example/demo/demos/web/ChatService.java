@@ -121,7 +121,7 @@ public class ChatService {
                 headers.set("Content-Type", "application/json");
 
                 CozeRequest request = new CozeRequest();
-                request.setUserID("2120240810");
+                request.setUserID("2320240868");
 //                request.setInputs(Map.of("init", "true")); // 根据API文档要求参数
                 request.setQuery(""); // 必须的查询字段
 
@@ -186,8 +186,8 @@ public class ChatService {
                 CozeRequest request = new CozeRequest();
                 request.setAppConversationID(conversationId);
                 request.setQuery(question);
-                request.setResponseMode("blocking");
-                request.setUserID("2120240810");
+                request.setResponseMode("streaming");
+                request.setUserID("2320240868");
 
                 HttpEntity<CozeRequest> entity = new HttpEntity<>(request, headers);
 

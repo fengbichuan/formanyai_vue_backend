@@ -56,7 +56,7 @@ public class ChatWsController {
         String cozeUrl = "https://coze.nankai.edu.cn";
         this.cozeWebClient = WebClient.builder()
                 .baseUrl(cozeUrl)
-                .defaultHeader("Apikey", "cvcn5grkphnujaq0nlmg")
+                .defaultHeader("Apikey", "cvpq1bbkphnujaq29ejg")
                 .defaultHeader("Content-Type", "application/json")
                 .codecs(config -> config.defaultCodecs().maxInMemorySize(16 * 1024 * 1024))
                 .filter(logRequest())
@@ -112,7 +112,6 @@ public class ChatWsController {
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToFlux(String.class)
-                    .timeout(Duration.ofSeconds(30))
                     .filter(chunk -> chunk != null && !chunk.isEmpty())
                     .subscribe(
                             chunk -> processStreamChunk(ai, chunk, startTime),
@@ -169,7 +168,7 @@ public class ChatWsController {
             requestBody.put("AppConversationID", conversationId); // REQUIRED
             requestBody.put("Query", message.getQuestion());     // REQUIRED
             requestBody.put("ResponseMode", "streaming");       // REQUIRED (for streaming)
-            requestBody.put("UserID", "2120240810");             // REQUIRED (use dynamic/configured value)
+            requestBody.put("UserID", "2320240868");             // REQUIRED (use dynamic/configured value)
 
             // 输出
             System.err.println("request map:");
@@ -186,7 +185,7 @@ public class ChatWsController {
 
 
             // --- Detailed Logging ---
-            String requestUrl = "cvcn5grkphnujaq0nlmg" + "/api/proxy/api/v1/chat_query_v2";
+            String requestUrl = "cvpq1bbkphnujaq29ejg" + "/api/proxy/api/v1/chat_query_v2";
             String requestBodyJson = "[Serialization Error]";
             try {
                 requestBodyJson = this.objectMapper.writeValueAsString(requestBody);
@@ -211,7 +210,6 @@ public class ChatWsController {
                     .bodyValue(requestBody) // Send the corrected map
                     .retrieve()
                     .bodyToFlux(String.class)
-                    .timeout(Duration.ofSeconds(30))
                     .filter(chunk -> chunk != null && !chunk.isEmpty())
                     .subscribe(
                             chunk -> processCozeStreamChunk(ai, chunk, startTime),
