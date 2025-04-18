@@ -22,12 +22,4 @@ public class CozeController {
         return Map.of("conversationId", future.join());
     }
 
-    // 发送问题到指定对话
-    @PostMapping("/ask")
-    public Map<String, String> chatQuery(@RequestBody Map<String, String> request) {
-        String conversationId = request.get("conversationId");
-        String question = request.get("question");
-        CompletableFuture<String> future = chatService.chatWithCoze(conversationId, question);
-        return Map.of("answer", future.join());
-    }
 }

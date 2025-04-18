@@ -7,6 +7,9 @@ public class CozeResponse {
     @JsonProperty("answer")
     private String answer;
 
+    @JsonProperty("thought")
+    private String thought;
+
     @JsonProperty("AppConversationID")
     private String appConversationID;
 
@@ -37,4 +40,6 @@ public class CozeResponse {
     public void setAppConversationID(String appConversationID) {
         this.appConversationID = appConversationID;
     }
+    public void setThought(String thought) {        this.thought = thought;    }
+    public void getThought(String thought){this.thought = thought;}
 }
